@@ -1,0 +1,3 @@
+backend/nlp/.cache/*
+backend/nlp/__pycache__/*
+backend/nlp/.ipynb_checkpoints/*

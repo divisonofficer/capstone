@@ -1,0 +1,5 @@
+# KoBERT 라이브러리 설치
+!pip install mxnet
+!pip install gluonnlp pandas tqdm
+!pip install sentencepiece
+!pip install transformers
