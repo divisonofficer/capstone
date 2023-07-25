@@ -1,3 +1,5 @@
 backend/nlp/.cache/*
 backend/nlp/__pycache__/*
 backend/nlp/.ipynb_checkpoints/*
+path_to_your_nltk_data_directory/*
+backend/kobart/*
