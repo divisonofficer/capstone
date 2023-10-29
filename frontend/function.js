@@ -60,10 +60,7 @@ function chatDateHead() {
 
 function renderChat() {
   $("#chat-left").empty();
-  $("#chat-right").empty();
   $("#chat-left").append(chatDateHead());
-  $("#chat-right").append(chatDateHead());
-
   let i = 0,
     len = chat_list.length;
   chat_list.forEach((chat) => {
@@ -74,20 +71,18 @@ function renderChat() {
       chat_list[i + 1].time != chat.time;
     if (chat.owner == 0) {
       $("#chat-left").append(msg_me(chat.time, chat.text, timeVisible));
-      if (profileVisible) {
-        $("#chat-right").append(profile_other());
-      }
-      $("#chat-right").append(msg_other(chat.time, chat.text, timeVisible));
     } else {
       if (profileVisible) {
         $("#chat-left").append(profile_me());
       }
       $("#chat-left").append(msg_other(chat.time, chat.text, timeVisible));
-      $("#chat-right").append(msg_me(chat.time, chat.text, timeVisible));
     }
 
     i = i + 1;
   });
+
+
+  $("#chat-left").scrollTop($("#chat-left")[0].scrollHeight);
 }
 
 function sendMsg(owner) {
@@ -123,6 +118,56 @@ function sendMsg(owner) {
   $("#chat-left").scrollTop($("#chat-left")[0].scrollHeight);
 }
 
+
+function getSearchResult(){
+  let text = $("#input-left").val();
+  if (text == "") {
+    return;
+  }
+  chat_list.push({
+    owner: 0,
+    type: 0,
+    text: text,
+    // time with hour and minute
+    time: new Date().toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    }),
+  });
+  $("#input-left").val("");
+  $("#send-left").css("background-color", "#e0e0e0");
+
+
+
+  //search?query=검색어
+  $.ajax({
+    type: "GET",
+    url: "/search?query="+text+"&K=3",
+    success: function (response) {
+      response.forEach((result) => {
+        chat_list.push({
+          owner: 1,
+          type: 1,
+          text: `${result.Title}\n${result.Url}`,
+          // time with hour and minute
+          //time : result.Date, 2020-10-10 to 10-10
+          time: result.Date.substring(5, 10),
+        });
+      });
+      
+      renderChat();
+      //$("#chat-left").append(msg_me(chat.time, chat.text, timeVisible));
+      //$("#chat-right").append(msg_other(chat.time, chat.text, timeVisible));
+    },
+    error: function (error) {
+      console.log(error);
+    },
+  });
+  
+}
+
+
+
 $(document).ready(() => {
   renderChat();
 
@@ -145,21 +190,13 @@ $(document).ready(() => {
 
   $("#input-left").keyup(function (e) {
     if (e.which == 13 && !e.shiftKey) {
-      sendMsg(0);
+      getSearchResult();
       $("#input-left").blur();
+
       setTimeout(() => {
         $("#input-left").focus();
       }, 10);
     }
   });
 
-  $("#input-right").keyup(function (e) {
-    if (e.which == 13 && !e.shiftKey) {
-      sendMsg(1);
-      $("#input-right").blur();
-      setTimeout(() => {
-        $("#input-right").focus();
-      }, 10);
-    }
-  });
 });

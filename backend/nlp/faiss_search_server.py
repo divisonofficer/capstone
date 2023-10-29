@@ -9,7 +9,9 @@ CORS(app)
 @app.route('/search', methods=['GET'])
 def search():
     query = request.args.get('query')
-    results = search_k_nearest(query, 10)
+    K = int(request.args.get('K') or "3")
+  
+    results = search_k_nearest(query, K)
     return results
 
 
