@@ -32,8 +32,9 @@ def static_dir(path):
 def search():
     # send get request to :5100/search and return response
     query = request.args.get('query')
+    K = request.args.get('K') or 5
     url = SEARCH_BACKEND + "/search"
-    params = {"query": query}
+    params = {"query": query, "K" : K}
     response = requests.get(url, params=params)
     
     if response.status_code == 200:
