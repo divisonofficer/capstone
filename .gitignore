@@ -5,3 +5,4 @@ path_to_your_nltk_data_directory/*
 backend/kobart/*
 backend/crawling/zNex~$harefile_content_list.csv
 backend/crawling/__pycache__/post_crawling.cpython-38.pyc
+backend/capstone/*
