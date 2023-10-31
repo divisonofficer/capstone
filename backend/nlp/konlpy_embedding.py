@@ -19,10 +19,13 @@ print("Loading KoBERT")
 okt = Okt()
 # Tokenizing
 tqdm.pandas(desc="Tokenizing")
-df['Morphs'] = df['Content'].apply(lambda x: Okt.morphs(x))
+df['Content_Morphs'] = df['Content'].apply(lambda x: Okt.morphs(x))
+df['Title_Morphs'] = df['Title'].apply(lambda x: Okt.morphs(x))
 # 형태소들의 리스트를 모두 합쳐서 고유한 형태소들의 집합을 만듦
 all_morphs = set()
-for morphs in df['Morphs']:
+for morphs in df['Content_Morphs']:
+    all_morphs.update(morphs)
+for morphs in df['Title_Morphs']:
     all_morphs.update(morphs)
 
 # 각 형태소에 고유한 ID 할당
@@ -30,7 +33,7 @@ token_to_id = {morph: idx for idx, morph in enumerate(all_morphs)}
 
 
 # 정수 벡터 변환 및 패딩을 위한 함수 정의
-def convert_to_int_vector(morphs, token_to_id, max_length=500):
+def convert_to_int_vector(morphs, token_to_id, max_length=1024):
     # 형태소를 정수로 변환
     int_vector = [token_to_id.get(morph, 0) for morph in morphs]
 
@@ -46,6 +49,10 @@ def convert_to_int_vector(morphs, token_to_id, max_length=500):
 
 # 'Morphs' 열에 정수 벡터 변환 및 패딩 적용
 tqdm.pandas(desc="Int-Vectorizing")
-df['Int_Vectors'] = df['Morphs'].apply(lambda x: convert_to_int_vector(x, token_to_id))
+df['Content_Ids'] = df['Content_Morphs'].apply(lambda x: convert_to_int_vector(x, token_to_id))
+df['Title_Ids'] = df['Title_Morphs'].apply(lambda x: convert_to_int_vector(x, token_to_id))
+
+
+
 
 

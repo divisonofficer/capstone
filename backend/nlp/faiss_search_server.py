@@ -1,6 +1,6 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from faiss_search_requisite import search_k_nearest
+from faiss_search_requisite import search_k_nearest, init_faiss
 
 app = Flask(__name__)
 CORS(app)
@@ -17,7 +17,9 @@ def search():
 
 
 if __name__ == '__main__':
+    init_faiss()
     app.run(port=5100, debug=True)
+    
 
 
 
