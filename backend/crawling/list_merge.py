@@ -10,5 +10,8 @@ dataframes = [pd.read_csv(file) for file in file_paths]
 # 모든 DataFrame을 하나로 합칩니다.
 merged_dataframe = pd.concat(dataframes, ignore_index=True)
 
+# 중복된 행을 제거합니다. 제목이 같은 경우 중복으로 간주합니다.
+merged_dataframe.drop_duplicates(subset=['Title'], inplace=True)
+
 # 결과를 새 CSV 파일로 저장합니다.
 merged_dataframe.to_csv('merged.csv', index=False)

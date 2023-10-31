@@ -29,6 +29,7 @@ class Post_Content_Loader:
         url_pattern = re.compile(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+')  
         soup_content = url_pattern.sub('', soup_content)  
         soup_content = re.sub(r'[^\uAC00-\uD7A3a-zA-Z0-9 ]', '', soup_content)
+        return soup_content
 
     def extract_attributes(self):
         self.attributes = self.soup.find('div', {'class': 'board-view-title-wrap'})
@@ -85,6 +86,9 @@ class Post_Content_Loader:
 class Post_Content_Loader_Campus(Post_Content_Loader):
     def extract_content(self):
         soup_content = self.soup.find('dl', {'class': 'board-write-box board-write-box-v03'}).text.strip()
+        url_pattern = re.compile(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+')  
+        soup_content = url_pattern.sub('', soup_content)  
+        soup_content = re.sub(r'[^\uAC00-\uD7A3a-zA-Z0-9 ]', '', soup_content)
         return soup_content
     
     def extract_attributes(self):

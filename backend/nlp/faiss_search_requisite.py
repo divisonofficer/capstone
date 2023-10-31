@@ -4,7 +4,7 @@ import torch
 from transformers import BertTokenizer, BertModel
 import faiss
 from tqdm import tqdm
-
+from konlpy.tag import Okt
 
 
 
@@ -14,12 +14,19 @@ from tqdm import tqdm
 # 2. Vectorize Korean text columns using KoBERT
 class KoBertEmbedding:
     def __init__(self):
-        self.tokenizer = BertTokenizer.from_pretrained('monologg/kobert')
-        self.model = BertModel.from_pretrained('monologg/kobert')
+        modelname = "kykim/bert-kor-base" #'monologg/kobert'
+        self.tokenizer = BertTokenizer.from_pretrained(modelname)
+        self.model = BertModel.from_pretrained(modelname)
         self.model.eval()
 
     def get_embedding(self, text):
-        inputs = self.tokenizer(text, return_tensors="pt", truncation=True, padding=True, max_length=128)
+        inputs = self.tokenizer.encode_plus(
+            text,
+            max_length=256,
+            padding='max_length',
+            truncation=True,
+            return_tensors='pt'
+        )
         with torch.no_grad():
             outputs = self.model(**inputs)
         return outputs['last_hidden_state'][:,0,:].numpy()
@@ -40,10 +47,6 @@ print("Loading KoBERT")
 # Vectorize using KoBERT
 kobert = KoBertEmbedding()
 
-
-
-#raws Content를 바탕으로 한 비교는 의미있는 뚜렷한 결과를 양산하지는 못하고 있음
-#df["Vectors"] = df["Content"].apply(kobert.get_embedding)
 tqdm.pandas(desc="Vectorizing")
 # Vectorizing
 df["Vectors"] = df["Title"].progress_apply(kobert.get_embedding)
