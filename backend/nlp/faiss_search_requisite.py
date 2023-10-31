@@ -3,6 +3,7 @@ import pandas as pd
 import torch
 from transformers import BertTokenizer, BertModel
 import faiss
+from tqdm import tqdm
 
 
 
@@ -27,7 +28,7 @@ class KoBertEmbedding:
 print("Loading csv files")
 
 # Specify your file path
-file_path = '../crawling/file_content_list.csv'
+file_path = '../crawling/merged.csv'
 
 # Read the CSV file into a DataFrame
 df = pd.read_csv(file_path)
@@ -40,10 +41,12 @@ print("Loading KoBERT")
 kobert = KoBertEmbedding()
 
 
-print("Vectorizing")
+
 #raws Content를 바탕으로 한 비교는 의미있는 뚜렷한 결과를 양산하지는 못하고 있음
 #df["Vectors"] = df["Content"].apply(kobert.get_embedding)
-df["Vectors"] = df["Title"].apply(kobert.get_embedding)
+tqdm.pandas(desc="Vectorizing")
+# Vectorizing
+df["Vectors"] = df["Title"].progress_apply(kobert.get_embedding)
 vectors = np.vstack(df["Vectors"].values)
 
 
