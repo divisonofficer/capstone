@@ -6,7 +6,7 @@ import faiss
 from tqdm import tqdm
 from konlpy.tag import Okt
 
-from mykobert import load_model, get_embedding, content_df
+from mykobert import load_model, get_embedding, get_bert_embedding, content_df, HIDDEN_SIZE
 
 
 
@@ -52,8 +52,28 @@ def init_faiss():
     print("Loading csv files")
     load_model()
 
-    df, title_vector, content_vector = content_df()
-    content_vector = [x.cpu() for x in content_vector]
+    df, title_vector, content_vector = content_df(cached=True)
+    title_vector = title_vector.apply(lambda x: x.cpu().numpy())
+    content_vector = content_vector.apply(lambda x: x.cpu().numpy())
+    tqdm.pandas(desc="Vectorizing")
+    
+
+    #-- 추가 레이어 적용할 시
+
+    #content_vector = content_vector.progress_apply(lambda x: get_embedding(x))
+    #title_vector = title_vector.progress_apply(lambda x: get_embedding(x))
+    
+    #reshape from (n, ) to (n, 512), get_embedding returns (1,512)
+    
+    #content_vector = np.array(content_vector.tolist()).reshape(-1, HIDDEN_SIZE)
+    #title_vector = np.array(title_vector.tolist()).reshape(-1, HIDDEN_SIZE)
+
+    print(content_vector.shape, title_vector.shape)
+    content_vector = np.array(content_vector.tolist()).reshape(-1, 768)
+    title_vector = np.array(title_vector.tolist()).reshape(-1, 768)
+
+
+
     print("Loading KoBERT")
 
     # Vectorize using KoBERT
@@ -65,9 +85,16 @@ def init_faiss():
 
     tqdm.pandas(desc="Vectorizing")
     # Vectorizing
-    
-    vectors = np.vstack(content_vector)
 
+   # 새로운 배열 생성
+    print(title_vector.shape)
+
+    #vectors = np.empty((title_vector.shape[0] * 2, HIDDEN_SIZE), dtype=title_vector.dtype)
+    vectors = np.empty((title_vector.shape[0] * 2, 768), dtype=title_vector.dtype)
+
+    # 각 행 번갈아 가며 추가
+    vectors[0::2] = title_vector
+    vectors[1::2] = content_vector
 
 
     print("Creating Faiss index")
@@ -75,16 +102,23 @@ def init_faiss():
     d = vectors.shape[1]
     index = faiss.IndexFlatL2(d) 
     index.add(vectors)
+    print("Faiss index created, shape:", d)
 
 
 
 
 def search_k_nearest(text, K=10):
-    #vector = kobert.get_embedding(text)
-    vector = get_embedding(text)
+    vector = get_bert_embedding(text)
+    #주가 레이어 사용 시
+    #vector = get_embedding(text)
+    
+    #if vector is cuda, convert to cpu.numpy
+    if type(vector) == torch.Tensor:
+        vector = vector.cpu().numpy()
+
     distances, indices = index.search(vector, K)
     for i in range(K):
-        print(f"Rank {i+1}: {df.iloc[indices[0][i]]['Title']} (Distance: {distances[0][i]:.4f})")
+        print(f"Rank {i+1}: {df.iloc[int(indices[0][i] / 2)]['Title']} (Distance: {distances[0][i]:.4f})")
     
 
-    return pd.DataFrame([df.iloc[indices[0][i]] for i in range(K)]).drop('Vectors', axis=1).to_json(orient='records', force_ascii=False).replace('\/', '/')
+    return pd.DataFrame([df.iloc[int(indices[0][i] / 2)] for i in range(K)]).to_json(orient='records', force_ascii=False).replace('\/', '/')

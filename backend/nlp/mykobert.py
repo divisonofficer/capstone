@@ -6,14 +6,18 @@ from tqdm import tqdm
 import pandas as pd
 import sys
 import konlpy
+from torch.optim.lr_scheduler import ReduceLROnPlateau
+
+
+HIDDEN_SIZE = 256
 
 device = torch.device("cuda")
 
 MODEL_FILENAME = "mymodel.pt"
 
 def kobert_model():
-    modelname = "kykim/bert-kor-base" #'monologg/kobert'
-    tokenizer = BertTokenizer.from_pretrained(modelname)
+    modelname = "klue/bert-base" #"kykim/bert-kor-base" #'monologg/kobert'
+    tokenizer = BertTokenizer.from_pretrained(modelname)    
     model = BertModel.from_pretrained(modelname)
     model.to(device)
     model.eval()
@@ -42,25 +46,38 @@ def get_bert_embedding(text):
         outputs = bert_model(**inputs)
     return outputs['last_hidden_state'][:,0,:]
 
+import torch.nn.functional as F
+class Mish(nn.Module):
+    def forward(self, x):
+        return x * torch.tanh(F.softplus(x))
 
 class KoBertEmbedding(nn.Module):
     def __init__(self):
         super(KoBertEmbedding, self).__init__()
-        self.fc = nn.Sequential(
+        # 인코더 부분
+        self.encoder = nn.Sequential(
             nn.Linear(768, 512),
-            nn.ReLU(),
+            Mish(),
             nn.Linear(512, 256),
-            nn.ReLU(),
-            nn.Linear(256, 512)
+            Mish(),
+            nn.Linear(256, HIDDEN_SIZE)  # 잠재 벡터 크기는 128
+        )
+        # 디코더 부분
+        self.decoder = nn.Sequential(
+            nn.Linear(HIDDEN_SIZE, 256),
+            Mish(),
+            nn.Linear(256, 512),
+            Mish(),
+            nn.Linear(512, 768)  # 최종 출력은 원래 입력 크기와 동일
         )
 
-        self.do = nn.Dropout(0.1)
-
-    
     def forward(self, x):
-        x = self.fc(x)
-        x = self.do(x)
+        x = self.encoder(x)  # 인코딩
+        x = self.decoder(x)  # 디코딩
         return x
+
+    def get_latent_vector(self, x):
+        return self.encoder(x)  # 잠재 벡터를 얻는 함수
     
 
     
@@ -75,34 +92,58 @@ def train_model(train_x, train_y):
 
 
     # 손실 함수 및 옵티마이저 정의
-    criterion = nn.CosineSimilarity(dim=1)
-    optimizer = optim.Adam(model.parameters(), lr=0.002)
+    criterion = nn.CosineSimilarity(dim=1).to(device)
+    optimizer = optim.Adam(model.parameters(), lr=0.04)
+    #scheduler = ReduceLROnPlateau(optimizer, 'min', patience=2, factor=0.1, verbose=True)
+
+
+    #batch 쪼개서 dataloader 구성
+    data_loader = torch.utils.data.DataLoader(
+        list(zip(train_x, train_y)), batch_size=16, shuffle=True
+    )
 
     # 학습 루프
     for epoch in range(num_epochs):
         model.train()
-        # get batch from train x and train_y
-        print(f"Epoch {epoch+1}/{num_epochs}")
-        inputs = list(zip(train_x, train_y))
+        with tqdm(data_loader, unit="batch") as tepoch:
+            for batch in tepoch:
+                tepoch.set_description(f"Epoch {epoch + 1}")
 
-        
-        
-        for title_features, content_features in tqdm(inputs, desc="Training"):
-         # dataloader는 Title_Features와 Content_Features를 제공
-     
+                # 입력과 목표값
+                x, y = batch
 
-            # 순전파
-            title_output = model(title_features)
-            content_output = model(content_features)
+                #input = x + x + y + y
+                #target = x + y + x + y
 
-            # 손실 계산
-            loss = -criterion(title_output, content_output).mean()  # 코사인 유사도를 최대화
+                inputs = torch.cat((x, x, y, y), 0)
+                targets = torch.cat((x, y, x, y), 0)
 
-            # 역전파
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-        print(f"Epoch [{epoch+1}/{num_epochs}], Loss: {loss.item()}")
+           
+                # 예측
+                outputs = model(inputs)
+                #target_ouputs = model(targets)
+
+                # concant outputs_targetoutputs & inputs_targets
+                #outputs = torch.cat((outputs, target_ouputs), 0)
+                #targets = torch.cat((targets, inputs), 0)
+                
+                # 손실 계산
+                loss = -criterion(outputs, targets).mean()
+                
+                # 역전파
+                optimizer.zero_grad()
+                loss.backward()
+                
+                # 매개변수 업데이트
+                optimizer.step()
+                #scheduler.step(loss)
+
+                # tqdm 상태 업데이트
+                tepoch.set_postfix(loss=loss.item())
+
+        print(f"Epoch [{epoch+1}/{num_epochs}], Loss: {loss.item()}, lr: {optimizer.param_groups[0]['lr']}")
+
+
     save_model()
 
     
@@ -123,17 +164,26 @@ def load_model():
 
 def get_embedding(text):
     global model
-    text = get_bert_embedding(text)
+    if type(text) == str:
+        text = get_bert_embedding(text)
     with torch.no_grad():
-        return model.forward(text).cpu().numpy()
+        ret = model.get_latent_vector(text)
+        return model.get_latent_vector(text).cpu().numpy()
     
 
 
 
 
-def content_df():
+def content_df(cached=False):
+    if cached:
+        print("Load cahced file")
+        df = pd.read_csv("merged.csv")
+        train_x = torch.load("train_x.pt")
+        train_y = torch.load("train_y.pt")
+        return df, train_x, train_y
     print("Loading csv files")
     file_path = '../crawling/merged.csv'
+
 
     # Read the CSV file into a DataFrame
     df = pd.read_csv(file_path)
@@ -141,18 +191,23 @@ def content_df():
     okt = konlpy.tag.Okt()
     tqdm.pandas(desc="Tokenizing Contents")
     df["Content"] = df["Content"].progress_apply(lambda x: " ".join(okt.nouns(x)))
-
+    df = df[df["Content"].str.len() > 0]
     tqdm.pandas(desc="Vectorizing Titles")
     train_x = df["Title"].progress_apply(get_bert_embedding)
     tqdm.pandas(desc="Vectorizing Contents")
 
-    df = df[df["Content"].str.len() > 0]
+
     
     train_y = df["Content"].progress_apply(get_bert_embedding)
 
     # save train_x train_y as file
     torch.save(train_x, "train_x.pt")
     torch.save(train_y, "train_y.pt")
+
+    catch_path = 'merged.csv'
+
+    # save df
+    df.to_csv(catch_path, index=False)
 
     return df, train_x, train_y
 
@@ -167,9 +222,9 @@ if __name__ == '__main__':
         train_x = torch.load("train_x.pt")
         train_y = torch.load("train_y.pt")
         train_model(train_x, train_y)
+
         sys.exit(0)
     else:
         df, train_x, train_y = content_df()
-
-    train_model(train_x, train_y)
+        train_model(train_x, train_y)
 
